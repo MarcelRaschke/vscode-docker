@@ -74,14 +74,13 @@ export class ImagesTreeItem extends LocalRootTreeItemBase<ILocalImageInfo, Image
 }
 
 async function recursiveGetFlattenedCachedChildren(context: IActionContext, node: AzExtParentTreeItem): Promise<AzExtTreeItem[]> {
-    const results: AzExtTreeItem[] = [];
+    let results: AzExtTreeItem[] = [];
 
     for (const child of await node.getCachedChildren(context)) {
         results.push(child);
 
         if (child instanceof AzExtParentTreeItem) {
-            const children = await recursiveGetFlattenedCachedChildren(context, child);
-            children.forEach(c => results.push(c));
+            results = results.concat(await recursiveGetFlattenedCachedChildren(context, child));
         }
     }
 

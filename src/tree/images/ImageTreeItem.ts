@@ -127,11 +127,11 @@ export class ImageTreeItem extends AzExtTreeItem {
 
 function recursiveGetChildImageTags(imageId: string, allImages: ImageInfo[]): string[] {
     const childImages = allImages.filter(i => i.ParentId === imageId);
-    const results: string[] = [];
+    let results: string[] = [];
 
     for (const childImage of childImages) {
         // Depth-first search
-        recursiveGetChildImageTags(childImage.Id, allImages).forEach(t => results.push(t));
+        results = results.concat(recursiveGetChildImageTags(childImage.Id, allImages));
 
         if (childImage.RepoTags) {
             for (const repoTag of childImage.RepoTags) {
