@@ -4,10 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Image, ImageInfo } from 'dockerode';
-import { commands, window } from 'vscode';
-import { AzExtParentTreeItem, AzExtTreeItem, IActionContext, IParsedError, parseError, UserCancelledError } from "vscode-azureextensionui";
+import { AzExtParentTreeItem, AzExtTreeItem, IActionContext, IParsedError, parseError } from "vscode-azureextensionui";
 import { ext } from '../../extensionVariables';
-import { localize } from '../../localize';
 import { callDockerodeWithErrorHandling } from '../../utils/callDockerodeWithErrorHandling';
 import { getThemedIconPath, IconPath } from '../IconPath';
 import { ILocalImageInfo } from './LocalImageInfo';
@@ -63,6 +61,14 @@ export class ImageTreeItem extends AzExtTreeItem {
     }
 
     public async deleteTreeItemImpl(context: IActionContext): Promise<void> {
+        const childImages = await this.getChildImages();
+
+        for (const childImage of childImages) {
+            const ci = ext.dockerode.getImage(childImage.Id);
+            // eslint-disable-next-line @typescript-eslint/promise-function-async
+            await callDockerodeWithErrorHandling(() => ci.remove({ force: true }), context);
+        }
+
         const image: Image = this.getImage();
         try {
             // eslint-disable-next-line @typescript-eslint/promise-function-async
@@ -70,73 +76,38 @@ export class ImageTreeItem extends AzExtTreeItem {
         } catch (error) {
             const parsedError: IParsedError = parseError(error);
 
-            // error code 409 is returned for conflicts like the image is used by a running container or another image.
-            // Such errors are not really an error, it should be treated as warning.
-            if (parsedError.errorType === '409' || parsedError.errorType === 'conflict') {
-                await this.handleImageDeleteConflict(context);
-
-                // Throw a UserCancelledError instead since this isn't a real error
-                throw new UserCancelledError();
-            } else {
+            // Ignore 404 errors since it's possible this image was already deleted
+            if (parsedError.errorType !== '404' && parsedError.errorType.toLowerCase() !== 'notfound') {
                 throw error;
             }
         }
     }
 
-    private async handleImageDeleteConflict(context: IActionContext): Promise<void> {
-        const childTags = await this.getChildImageTags();
-
-        if (childTags.length > 0) {
-            const message = localize('vscode-docker.tree.images.dependentImages', 'Image {0} cannot be removed because the following image(s) depend on it and must be removed first: {1}', this.fullTag, childTags.join(', '));
-            const removeChildren = localize('vscode-docker.tree.images.removeDependentImages', 'Remove Dependent Images');
-
-            const allImageNodes = await ext.imagesRoot.getFlattenedCachedChildren(context);
-
-            // Since childTags comes as depth-first search, deleting in this specific order should work, as we'll be targeting leaf nodes first
-            const dependentImageNodes: ImageTreeItem[] = childTags.map(childFullTag => {
-                return allImageNodes.find(n => n instanceof ImageTreeItem && n.fullTag === childFullTag) as ImageTreeItem
-            });
-
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            window.showWarningMessage(message, ...[removeChildren]).then(response => {
-                if (response === removeChildren) {
-                    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-                    commands.executeCommand('vscode-docker.images.remove', dependentImageNodes[0], dependentImageNodes);
-                }
-            });
-        } else {
-            const message = localize('vscode-docker.tree.images.dependentDanglingImages', 'Image {0} cannot be removed because there are dependent dangling images. Please prune images before removing this image.', this.fullTag);
-            const prune = localize('vscode-docker.tree.images.pruneButton', 'Prune Now');
-
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            window.showWarningMessage(message, ...[prune]).then(response => {
-                if (response === prune) {
-                    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-                    commands.executeCommand('vscode-docker.images.prune');
-                }
-            });
-        }
-    }
-
-    private async getChildImageTags(): Promise<string[]> {
+    private async getChildImages(): Promise<ImageInfo[]> {
         const allImages = await ext.dockerode.listImages({ all: true });
 
-        return recursiveGetChildImageTags(this.imageId, allImages);
+        return recursiveGetChildImages(allImages.find(i => i.Id === this.imageId), allImages);
     }
 }
 
-function recursiveGetChildImageTags(imageId: string, allImages: ImageInfo[]): string[] {
-    const childImages = allImages.filter(i => i.ParentId === imageId);
-    let results: string[] = [];
+function recursiveGetChildImages(image: ImageInfo, allImages: ImageInfo[]): ImageInfo[] {
+    const childImages = allImages.filter(i => i.ParentId === image.Id);
+    let results: ImageInfo[] = [];
 
-    for (const childImage of childImages) {
-        // Depth-first search
-        results = results.concat(recursiveGetChildImageTags(childImage.Id, allImages));
+    if (childImages.length === 0 && image.RepoTags.every(r => r === '<none>:<none>')) {
+        // If it has no children and no tags, it is dangling, so include it in the list to delete
+        results.push(image);
+    } else {
+        // Otherwise, get all tagged/dangling children from here
+        for (const childImage of childImages) {
+            // Depth-first search
+            results = results.concat(recursiveGetChildImages(childImage, allImages));
 
-        if (childImage.RepoTags) {
-            for (const repoTag of childImage.RepoTags) {
-                if (repoTag !== '<none>:<none>') {
-                    results.push(repoTag);
+            if (childImage.RepoTags) {
+                for (const repoTag of childImage.RepoTags) {
+                    if (repoTag !== '<none>:<none>') {
+                        results.push(childImage);
+                    }
                 }
             }
         }

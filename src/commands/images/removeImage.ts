@@ -21,9 +21,9 @@ export async function removeImage(context: IActionContext, node?: ImageTreeItem,
 
     let confirmRemove: string;
     if (nodes.length === 1) {
-        confirmRemove = localize('vscode-docker.commands.images.remove.confirmSingle', 'Are you sure you want to remove image "{0}"? This will remove all matching images.', nodes[0].fullTag);
+        confirmRemove = localize('vscode-docker.commands.images.remove.confirmSingle', 'Are you sure you want to remove image "{0}"? This will remove all matching and child images.', nodes[0].fullTag);
     } else {
-        confirmRemove = localize('vscode-docker.commands.images.remove.confirmMulti', 'Are you sure you want to remove selected images? This will remove all matching images.');
+        confirmRemove = localize('vscode-docker.commands.images.remove.confirmMulti', 'Are you sure you want to remove selected images? This will remove all matching and child images.');
     }
 
     // no need to check result - cancel will throw a UserCancelledError
@@ -32,5 +32,6 @@ export async function removeImage(context: IActionContext, node?: ImageTreeItem,
     let removing: string = localize('vscode-docker.commands.images.remove.removing', 'Removing image(s)...');
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: removing }, async () => {
         await Promise.all(nodes.map(async n => await n.deleteTreeItem(context)));
+        await ext.imagesRoot.refresh();
     });
 }

@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ImageInfo } from "dockerode";
-import { AzExtParentTreeItem, AzExtTreeItem, IActionContext } from "vscode-azureextensionui";
 import { ext } from "../../extensionVariables";
 import { localize } from '../../localize';
 import { LocalChildGroupType, LocalChildType, LocalRootTreeItemBase } from "../LocalRootTreeItemBase";
@@ -67,24 +66,6 @@ export class ImagesTreeItem extends LocalRootTreeItemBase<ILocalImageInfo, Image
     public getPropertyValue(item: ILocalImageInfo, property: ImageProperty): string {
         return getImagePropertyValue(item, property);
     }
-
-    public async getFlattenedCachedChildren(context: IActionContext): Promise<AzExtTreeItem[]> {
-        return await recursiveGetFlattenedCachedChildren(context, this);
-    }
-}
-
-async function recursiveGetFlattenedCachedChildren(context: IActionContext, node: AzExtParentTreeItem): Promise<AzExtTreeItem[]> {
-    let results: AzExtTreeItem[] = [];
-
-    for (const child of await node.getCachedChildren(context)) {
-        results.push(child);
-
-        if (child instanceof AzExtParentTreeItem) {
-            results = results.concat(await recursiveGetFlattenedCachedChildren(context, child));
-        }
-    }
-
-    return results;
 }
 
 function getFullTagFromDigest(image: ImageInfo): string {
