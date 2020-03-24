@@ -20,6 +20,7 @@ import { DockerDebugScaffoldContext } from '../debugging/DebugHelper';
 import { dockerDebugScaffoldingProvider, NetCoreScaffoldingOptions } from '../debugging/DockerDebugScaffoldingProvider';
 import { ext } from '../extensionVariables';
 import { localize } from '../localize';
+import { hasTask } from '../tasks/TaskHelper';
 import { extractRegExGroups } from '../utils/extractRegExGroups';
 import { getValidImageName } from '../utils/getValidImageName';
 import { globAsync } from '../utils/globAsync';
@@ -303,10 +304,9 @@ function generateComposeFiles(dockerfileName: string, platform: Platform, os: Pl
         }
     }
 
-    let volumesList = '      - ~/.vsdbg:/remote_debugger';
-    if (os === 'Linux') {
-        volumesList += ':rw'
-    }
+    let volumesList = os === 'Windows' ?
+        '      - ~/.vsdbg:c:\\remote_debugger:rw'
+        : '      - ~/.vsdbg:/remote_debugger:rw';
 
     // Ensure the path scaffolded in the Dockerfile uses POSIX separators (which work on both Linux and Windows).
     dockerfileName = dockerfileName.replace(/\\/g, '/');
@@ -397,6 +397,7 @@ async function inferOutputAssemblyName(appProjectFilePath: string): Promise<stri
 
 // tslint:disable-next-line: export-name
 export async function scaffoldNetCore(context: ScaffolderContext): Promise<ScaffoldFile[]> {
+    ensureDotNetCoreDependencies(context.folder, context);
     const os = context.os ?? (context.os = await context.promptForOS());
     const isCompose = await context.promptForCompose();
 
@@ -462,4 +463,12 @@ export async function scaffoldNetCore(context: ScaffolderContext): Promise<Scaff
     }
 
     return files;
+}
+
+export function ensureDotNetCoreDependencies(workspaceFolder: WorkspaceFolder, context: IActionContext): void {
+    if (!hasTask('build', workspaceFolder)) {
+        context.errorHandling.suppressReportIssue = true;
+        const message = localize('vscode-docker.configureDotNetCore.missingDependencies', 'A build task is missing. Please generate build task by running \'.NET: Generate Assets for Build and Debug\' before running this command');
+        throw new Error(message);
+    }
 }
