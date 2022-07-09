@@ -2484,7 +2484,7 @@
         "fs-extra": "^8.1.0",
         "glob": "^7.1.6",
         "gradle-to-js": "^2.0.0",
-        "moment": "^2.24.0",
+        "moment": "^2.29.1",
         "ms-rest": "^2.5.3",
         "ms-rest-azure": "^2.6.0",
         "request": "^2.88.2",
